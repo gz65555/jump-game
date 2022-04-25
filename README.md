@@ -4,7 +4,7 @@
 
 首先，我们需要分析 跳一跳的 MVP 版本有哪些内容：
 
-<img src="https://gw.alipayobjects.com/zos/OasisHub/0e1da064-1a75-442c-b209-96f9fb35d38d/image-20220411200354354.png" alt="image-20220411200354354" style="zoom:50%;" />
+<img src="https://gw.alipayobjects.com/zos/OasisHub/0e1da064-1a75-442c-b209-96f9fb35d38d/image-20220411200354354.png" alt="image-20220411200354354" style="zoom:20%;" />
 
 我们把核心的部分分成三大部分，**场景**、**角色**和**游戏逻辑**，后面的教程会以这三大部分为主，实现一个跳一跳的最小可用版本（并非完整的游戏）。
 
