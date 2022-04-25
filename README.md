@@ -6,7 +6,7 @@
 
 <img src="https://gw.alipayobjects.com/zos/OasisHub/0e1da064-1a75-442c-b209-96f9fb35d38d/image-20220411200354354.png" alt="image-20220411200354354" style="zoom:50%;" />
 
-我们把核心的部分分成三大部分，场景、角色和游戏逻辑，后面的教程会以这三大部分为主，实现一个跳一跳的最小可用版本（并非完整的游戏）。
+我们把核心的部分分成三大部分，**场景**、**角色**和**游戏逻辑**，后面的教程会以这三大部分为主，实现一个跳一跳的最小可用版本（并非完整的游戏）。
 
 第一期我们准备制作最基本的场景，完成灯光，相机，基本底座的摆放。
 
@@ -57,12 +57,7 @@ npm run dev
 如下面代码所示：
 
 ```typescript
-import {
-  Camera,
-  Vector3,
-  WebGLEngine,
-  DirectLight,
-} from "oasis-engine";
+import { Camera, Vector3, WebGLEngine, DirectLight } from "oasis-engine";
 
 // 初始化引擎
 const engine = new WebGLEngine("canvas");
