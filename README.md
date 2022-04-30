@@ -1,195 +1,272 @@
-# 跳一跳开发
+# 场景逻辑
 
-《跳一跳》是微信小游戏里第一款制作精良，也是非常受大家喜爱的游戏。这里以一个跳一跳 MVP（最简可行版本） 版本为例，让大家了解《如何用 Oasis 开发一款 Web 3D 游戏》这一过程。
+场景逻辑主要是 Table 的生成逻辑，当跳一跳角色一直往前跳动时，新的 Table 不断的生成，镜头也随之移动，完成这几点之后效果如下所示：
 
-首先，我们需要分析 跳一跳的 MVP 版本有哪些内容：
+<img src="/Users/husong/blog/Jump-2.gif" alt="Jump-2" style="zoom:50%;" />
 
-<img src="https://gw.alipayobjects.com/zos/OasisHub/0e1da064-1a75-442c-b209-96f9fb35d38d/image-20220411200354354.png" alt="image-20220411200354354" style="zoom:20%;" />
 
-我们把核心的部分分成三大部分，**场景**、**角色**和**游戏逻辑**，后面的教程会以这三大部分为主，实现一个跳一跳的最小可用版本（并非完整的游戏）。
 
-第一期我们准备制作最基本的场景，完成灯光，相机，基本底座的摆放。
+接下来我就带大家完成这个效果。
 
-在具体进入开发之前，我们需要先把整个项目工程搭建好。
 
-## 工程搭建
 
-由 oasisengine.cn 官网可以知道，使用 create-oasis-app 创建项目。
+## 重构代码
 
-使用命令的第一步需要安装 Node.js。如果已安装 Node.js(version >= 12.0.0) 可以执行命令创建 oasis 模板：
+随着逻辑的递增，代码的重构是不断的。为了更好地实现这样的效果，我们需要先把一小部分代码重构。
 
-```shell
-npm init @oasis-engine/oasis-app
-```
-
-因为我们无需额外开发前端部分，所以直接使用 Vanilla 模板即可。下面是调用命令的过程。
-
-<img src="https://gw.alipayobjects.com/zos/OasisHub/93ac04b6-4319-455d-9258-3cfd0041291a/init.gif" alt="init" style="zoom: 80%;" />
-
-当执行完成后，我们进入到项目中的 terminal 里，执行：
-
-```
-npm install
-```
-
-在安装完依赖后再使用：
-
-```shell
-npm run dev
-```
-
-启动 dev 服务器，过程如下图所示：
-
-<img src="https://gw.alipayobjects.com/zos/OasisHub/c97211af-5f18-46ba-8966-166cba9424df/init-install.gif" alt="init-install" style="zoom:80%;" />
-
-再打开 http://localhost:3000 即可看到：
-
-![image-20220414170930449](https://gw.alipayobjects.com/zos/OasisHub/c267e5c1-7ab7-430d-ad96-8328a4839544/image-20220414170930449.png)
-
-说明工程搭建已经完成。
-
-## 基本场景搭建
-
-### 引擎和场景初始化
-
-我们用 IDE 打开项目，找到 `/src/index.ts`
-
-如下面代码所示：
+首先新增 `Table.ts` 文件，把 Table 的相关部分都往这里迁移：
 
 ```typescript
-import { Camera, Vector3, WebGLEngine, DirectLight } from "oasis-engine";
+import { Easing, Tween } from "@tweenjs/tween.js";
+import { Entity } from "oasis-engine";
 
-// 初始化引擎
-const engine = new WebGLEngine("canvas");
-// 根据页面设置 canvas 大小
-engine.canvas.resizeByClientSize();
+export class Table {
+  constructor(public entity: Entity, public size: number) {}
+}
 
-const zeroVector = new Vector3(0, 0, 0);
-
-// 设置背景色
-const scene = engine.sceneManager.activeScene;
-scene.background.solidColor.setValue(208 / 255, 210 / 255, 211 / 255, 1);
-scene.ambientLight.diffuseSolidColor.setValue(0.5, 0.5, 0.5, 1);
-
-// 创建根节点
-const rootEntity = scene.createRootEntity();
-const cameraEntity = rootEntity.createChild("camera");
-cameraEntity.transform.setPosition(-100, 100, 100);
-const camera = cameraEntity.addComponent(Camera);
-
-// 初始化相机
-camera.isOrthographic = true;
-cameraEntity.transform.lookAt(zeroVector);
-
-// 初始化灯光
-const directLightEntity = rootEntity.createChild("directLight");
-const directLight = directLightEntity.addComponent(DirectLight);
-directLight.intensity = 0.5;
-directLightEntity.transform.setPosition(10, 30, 20);
-directLightEntity.transform.lookAt(zeroVector);
-
-engine.run();
 ```
 
-此段代码创建了引擎，场景，并且初始化了相机，灯光。
-
-相机使用正交相机，朝向原点。
-
-直接光也设置为朝向原点。
-
-完成以上步骤可以场景里还是一片灰色，我们来给场景添加底座生成和相机移动的逻辑
-
-### 场景底座初始化
-
-我们先新建一个 `SceneScript.ts` 的脚本的 `TableManager` 的文件 ，并且在 `rootEntity` 上添加：
+`TableManager.ts` 里的 `createCuboid` 方法修改成返回 `Table`：
 
 ```typescript
-const sceneScript = rootEntity.addComponent(SceneScript);
-```
-
-在 `SceneScript` 的 `onAwake` 生命周期中创建一个 ground entity，用来摆放跳一跳的底座。
-
-同时创建 `TableManager` 对象来控制底座的生成。
-
-```typescript
-onAwake() {
-  this.ground = this.entity.createChild("ground");
-  this.tableManager = new TableManager(this._engine, this.ground);
+createCuboid(x: number, y: number, z: number) {
+  ...
+  return new Table(cuboid, Config.tableSize);
 }
 ```
 
-我们在 `TableManager` 里创建不同材质(Material)和网格(Mesh)的 Table，因为是 MVP 版本，我这里只用一个红色的立方体 Table 作为示意：
+为之后 Table 的统一操作做一些准备。
+
+
+
+第二是把 Camera 的创建代码迁移到 `SceneScript` 内：
 
 ```typescript
-import {
-  BlinnPhongMaterial,
-  Engine,
-  Entity,
-  MeshRenderer,
-  ModelMesh,
-  PrimitiveMesh,
-} from "oasis-engine";
-import { Config } from "./Config";
+onAwake() { 
+	const cameraEntity = this.entity.createChild("camera");
+	this.cameraScript = cameraEntity.addComponent(CameraScript);
+}
+```
 
-export class TableManager {
-  private cuboidMesh: ModelMesh;
-  private cuboidMaterial: BlinnPhongMaterial;
+并且通过 `CameraScript.ts` 去初始化 Camera 的参数：
 
-  constructor(engine: Engine, private sceneEntity: Entity) {
-    this.cuboidMesh = PrimitiveMesh.createCuboid(
-      engine,
-      Config.tableSize,
-      Config.tableHeight,
-      Config.tableSize
-    );
-    this.cuboidMaterial = new BlinnPhongMaterial(engine);
-    this.cuboidMaterial.baseColor.setValue(1, 0, 0, 1);
+```typescript
+import { Camera, Script, Vector3 } from "oasis-engine";
+
+export class CameraScript extends Script {
+  onAwake(): void {
+    // init camera
+    const { entity } = this;
+    const camera = entity.addComponent(Camera);
+    camera.isOrthographic = true;
+    camera.nearClipPlane = 0.1;
+    camera.farClipPlane = 1000;
+    entity.transform.setPosition(-100, 100, 100);
+    entity.transform.lookAt(new Vector3());
   }
+}
 
-  createCuboid(x: number, y: number, z: number) {
-    const cuboid = this.sceneEntity.createChild("cuboid");
-    const renderEntity = cuboid.createChild("render");
-    renderEntity.transform.setPosition(0, Config.tableHeight / 2, 0);
-    cuboid.transform.setPosition(x, y, z);
-    const renderer = renderEntity.addComponent(MeshRenderer);
-    renderer.mesh = this.cuboidMesh;
-    renderer.setMaterial(this.cuboidMaterial);
-    return { entity: cuboid, size: Config.tableSize };
-  }
+```
 
-  clearAll() {
-    this.sceneEntity.clearChildren();
+这样我们就把代码更加结构化。我们可以开始新功能代码编写。
+
+
+
+## 下一个 Table
+
+我们要实现下一个 Table 的功能，先对此进行拆解，第一步是新 Table 的生成，第二步是镜头的移动。
+
+在 `SceneScript` 中加上：
+
+```typescript
+goNextTable() {
+  // 新 Table 的生成
+  this.tableManager.createNextTable();
+  // 镜头移动
+  this.cameraScript.updateCameraPosition();
+}
+```
+
+
+
+### 新 Table 的生成
+
+新 Table 的生成是基于当前 Table 的位置，向前或者是向左随机一段距离创建一个新的。
+
+那我们先在 `TableManager.ts` 里加上方法 `createNextTable()`，因为是基于当前 Table 创建的，所以参数需要传入一个 `Table`：
+
+```typescript
+createNextTable(currentTable: Table) {
+  const currentPosition = currentTable.entity.transform.position;
+  if (Math.random() > 0.5) {
+    const nextX = currentPosition.x + this.getRandomDistance();
+    return this.createCuboid(nextX, currentPosition.y, currentPosition.z);
+  } else {
+    const nextZ = currentPosition.z - this.getRandomDistance();
+    return this.createCuboid(currentPosition.x, currentPosition.y, nextZ);
   }
 }
 ```
 
-我们可以看到上面的的 `tableSize` 和 `tableHeight` 都是在 `GameConfig` 里定义的，我们也需要创建一个 `Config.ts` 来设置游戏配置：
+我们目前简化一下，50% 概率往前，50% 概率往左。再根据当前坐标，加一个随机距离。随机一段距离的代码也很简单：
 
 ```typescript
-export module Config {
-  export const tableHeight = 5 / 3;
-  export const tableSize = 8 / 3;
+/**  Table 距离 */
+private getRandomDistance() {
+  return 3.2 + Math.floor(Math.random() * 7);
 }
 ```
 
-我们再到 `SceneScript` 中添加 `reset` 方法：
+根据实际情况调整一下参数就行了。
+
+
+
+### 相机的移动
+
+相机的移动是根据当前 Table 和下一个 Table 的位置来定的，因为需要看到两个 Table，所以相机应当 lookAt 两个 Table 中间的位置，只需要在原始位置的基础上加上这个中间位置即可。
+
+我们在 CameraScript 中加入方法 ：
+
+```typescript
+ updateCameraPosition(currentTable: Table, nextTable: Table) {
+   const currentTablePosition = currentTable.entity.transform.position;
+   const nextTablePosition = nextTable.entity.transform.position;
+   this.entity.transform.setPosition(
+     (nextTablePosition.x + currentTablePosition.x) / 2 - 100,
+     (nextTablePosition.y + currentTablePosition.y) / 2 + 100,
+     (nextTablePosition.z + currentTablePosition.z) / 2 + 100
+   );
+ }
+```
+
+
+
+### Scene 脚本修改
+
+在相机移动和新 Table 生成的地方，都依赖于 `currentTable` 和 `targetTable` 两个对象，所以我们在 `SceneScript` 需要添加对当前和下一个 Table 的管理。
+
+在初始化的方法里，先缓存开始的 `currentTable` 和 `targetTable`：
 
 ```typescript
 reset() {
   this.ground.clearChildren();
-  this.tableManager.createCuboid(-2.5, 0, 0);
-  this.tableManager.createCuboid(4.2, 0, 0);
+  this.currentTable = this.tableManager.createCuboid(-2.5, 0, 0);
+  this.targetTable = this.tableManager.createCuboid(4.2, 0, 0);
 }
 ```
 
-`reset` 方法是之后每次游戏开始时和结束后都需要调用的方法。
+在到 `goNextTable` 方法里加上 current 和 target 的转换：
 
-上面的几个数值都是实际开发中调试出的结果，相对来说比较接近真实的游戏。
+```typescript
+goNextTable() {
+  this.currentTable = this.targetTable;
+  this.targetTable = this.tableManager.createNextTable(this.currentTable);
+  this.cameraScript.updateCameraPosition(this.currentTable, this.targetTable);
+}
+```
 
-我们在 `index.ts` 调用 `sceneScript.reset()` 即可看到效果：
 
-<img src="https://gw.alipayobjects.com/zos/OasisHub/421c96e6-279d-45f8-8a29-c7ea6fe6363e/image-20220424111857180.png" alt="image-20220424111857180" style="zoom:50%;" />
 
-那么本次的教程的目的已经完成，下一期会带来场景逻辑部分：底座生成和相机移动的部分。
+这样就可以完成了基本的场景逻辑，每次调用 `goNextTable` 方法，都会切换到新的 Table。但是作为一款游戏还少了非常重要的一部分，就是动画效果。
 
-本次教程代码可参考 [feat/init](https://github.com/gz65555/jump-game/tree/feat/init) 分支。
+
+
+## 添加动画效果
+
+这款游戏里用的动画大部分都比较简单，只需要使用简单缓动动画就可以实现，我们需要先安装 `tween.js` 来实现镜头移动和 Table 落下的效果。（关于 Tween.js 详细文档可以查看官网）
+
+```shell
+npm install @tweenjs/tween.js --save
+```
+
+
+
+我们先暂时在 `SceneScript` 添加 `Tween` 的更新：
+
+```typescript
+...
+import * as TWEEN from "@tweenjs/tween.js";
+
+export class SceneScript extends Script {
+  ...
+	onUpdate() {
+    TWEEN.update();
+  }
+}
+```
+
+
+
+### 镜头移动效果
+
+我们修改 `TableScript` 的 `updateCameraPosition` 方法：
+
+```typescript
+updateCameraPosition(currentTable: Table, nextTable: Table) {
+  const currentTablePosition = currentTable.entity.transform.position;
+  const nextTablePosition = nextTable.entity.transform.position;
+  new Tween(this.entity.transform.position)
+    .to(
+    {
+      x: (nextTablePosition.x + currentTablePosition.x) / 2 - 100,
+      y: (nextTablePosition.y + currentTablePosition.y) / 2 + 100,
+      z: (nextTablePosition.z + currentTablePosition.z) / 2 + 100,
+    },
+    800
+  )
+    .start()
+    .onUpdate(() => {
+    const pos = this.entity.transform.position;
+    this.entity.transform.position = pos;
+  });
+}
+```
+
+这样就会把 Camera 的位置在 800ms 内线性移动到目标位置。
+
+
+
+### Table 下落
+
+在 `Table.ts` 中添加 `show` 方法：
+
+```typescript
+show() {
+  const pos = this.entity.transform.position;
+  pos.y = 3.5;
+  this.entity.transform.position = pos;
+  new Tween({ posY: this.entity.transform.position.y })
+    .to({ posY: 0 }, 800)
+    .onUpdate((obj) => {
+    const pos = this.entity.transform.position;
+    pos.y = obj.posY;
+    this.entity.transform.position = pos;
+  })
+    .easing(Easing.Quartic.In)
+    .start();
+}
+```
+
+同时在 `TableManager` 里修改 `createNextTable` 方法：
+
+```typescript
+createNextTable(currentTable: Table) {
+  const currentPosition = currentTable.entity.transform.position;
+  let table: Table;
+  if (Math.random() > 0.5) {
+    const nextX = currentPosition.x + this.getRandomDistance();
+    table = this.createCuboid(nextX, currentPosition.y, currentPosition.z);
+  } else {
+    const nextZ = currentPosition.z - this.getRandomDistance();
+    table = this.createCuboid(currentPosition.x, currentPosition.y, nextZ);
+  }
+  table.show();
+  return table;
+}
+```
+
+在创建下一个 Table 时先调用 `table.show()` ，这样就会产生一个下落的效果。
+
+
+
+经过上述一系列操作之后，我们就实现了开始的效果，下一章会带来角色的创建和角色动画，敬请期待。
