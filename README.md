@@ -2,7 +2,7 @@
 
 场景逻辑主要是 Table 的生成逻辑，当跳一跳角色一直往前跳动时，新的 Table 不断的生成，镜头也随之移动，完成这几点之后效果如下所示：
 
-<img src="/Users/husong/blog/Jump-2.gif" alt="Jump-2" style="zoom:50%;" />
+<img src="https://gw.alipayobjects.com/zos/OasisHub/f266060e-e852-44a2-a73e-63336f0b1aac/Jump-2.gif" alt="Jump-2" style="zoom:50%;" />
 
 
 
