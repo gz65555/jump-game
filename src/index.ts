@@ -1,11 +1,7 @@
 import {
-  Camera,
   Vector3,
   WebGLEngine,
   DirectLight,
-  MeshRenderer,
-  PrimitiveMesh,
-  UnlitMaterial,
 } from "oasis-engine";
 import { SceneScript } from "./SceneScript";
 
