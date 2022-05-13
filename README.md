@@ -1,272 +1,410 @@
-# 场景逻辑
-
-场景逻辑主要是 Table 的生成逻辑，当跳一跳角色一直往前跳动时，新的 Table 不断的生成，镜头也随之移动，完成这几点之后效果如下所示：
-
-<img src="https://gw.alipayobjects.com/zos/OasisHub/f266060e-e852-44a2-a73e-63336f0b1aac/Jump-2.gif" alt="Jump-2" style="zoom:50%;" />
+# 角色创建和角色动画
 
 
 
-接下来我就带大家完成这个效果。
+<img src="https://gw.alipayobjects.com/zos/OasisHub/3bca2bad-edf8-4d90-867f-dc492b4d8bb5/image-20220509173559682.png" alt="image-20220509173559682" style="zoom:50%;" />
 
+在完成场景逻辑之后我们需要把角色放到场景中，这小节主要将如何把角色模型和角色动画创建出来。
 
+## 角色模型
 
-## 重构代码
+角色制作有两种方式：
 
-随着逻辑的递增，代码的重构是不断的。为了更好地实现这样的效果，我们需要先把一小部分代码重构。
+1. 使用 Oasis 的 PrimitiveMesh 创建，使用 Tween.js 写角色动画
+2. 使用 Blender 或其他 DCC 工具建模和动画制作
 
-首先新增 `Table.ts` 文件，把 Table 的相关部分都往这里迁移：
+我们先对模型进行分解：
 
-```typescript
-import { Easing, Tween } from "@tweenjs/tween.js";
-import { Entity } from "oasis-engine";
+<img src="https://gw.alipayobjects.com/zos/OasisHub/4c593c34-2409-4d4e-b48a-5c17966a16a7/image-20220211143703610.png" alt="image-20220211143703610" style="zoom:50%;" />
 
-export class Table {
-  constructor(public entity: Entity, public size: number) {}
-}
+从上图可以看出，角色由下面四个形状组成：
 
-```
+- 球
+- 球（Y 轴压缩）
+- 圆柱
+- 圆柱
 
-`TableManager.ts` 里的 `createCuboid` 方法修改成返回 `Table`：
+因为模型本身比较简单，这里直接使用 [PrimitiveMesh](https://oasisengine.cn/0.7/api/core/PrimitiveMesh) 创建模型，使用：
 
-```typescript
-createCuboid(x: number, y: number, z: number) {
-  ...
-  return new Table(cuboid, Config.tableSize);
-}
-```
+- [createSphere](https://oasisengine.cn/0.7/api/core/PrimitiveMesh#createSphere)
+- [createCylinder](https://oasisengine.cn/0.7/api/core/PrimitiveMesh#createCylinder)
 
-为之后 Table 的统一操作做一些准备。
-
-
-
-第二是把 Camera 的创建代码迁移到 `SceneScript` 内：
+可以完成对模型的创建。因为动画的缘故我们把角色分成两部分，头部和身体（下面角色动画会提到），本身逻辑非常简单，我们直接看代码吧，添加 `RoleScript.ts`：
 
 ```typescript
-onAwake() { 
-	const cameraEntity = this.entity.createChild("camera");
-	this.cameraScript = cameraEntity.addComponent(CameraScript);
-}
-```
+import {
+  BlinnPhongMaterial,
+  Material,
+  Mesh,
+  MeshRenderer,
+  PrimitiveMesh,
+  Script,
+  Entity,
+} from "oasis-engine";
+import { Config } from "./Config";
 
-并且通过 `CameraScript.ts` 去初始化 Camera 的参数：
+export class RoleScript extends Script {
+  private bodyEntity: Entity;
+  private headEntity: Entity;
 
-```typescript
-import { Camera, Script, Vector3 } from "oasis-engine";
-
-export class CameraScript extends Script {
-  onAwake(): void {
-    // init camera
-    const { entity } = this;
-    const camera = entity.addComponent(Camera);
-    camera.isOrthographic = true;
-    camera.nearClipPlane = 0.1;
-    camera.farClipPlane = 1000;
-    entity.transform.setPosition(-100, 100, 100);
-    entity.transform.lookAt(new Vector3());
+  onAwake() {
+    this.createRoleModel();
   }
-}
 
-```
+  /**
+   * 创建角色模型
+   */
+  private createRoleModel() {
+    const engine = this.engine;
+    const material = new BlinnPhongMaterial(engine);
+    material.baseColor.setValue(0, 0, 1, 1);
 
-这样我们就把代码更加结构化。我们可以开始新功能代码编写。
+    // 创建角色头部
+    const headEntity = this.createRolePart(
+      "head",
+      PrimitiveMesh.createSphere(engine, 0.3),
+      material,
+      this.entity
+    );
+    headEntity.transform.setPosition(0, 1.6, 0);
 
+    // 创建角色身体
+    const bodyEntity = this.entity.createChild("body");
 
+    const bottomEntity = this.createRolePart(
+      "bottom",
+      PrimitiveMesh.createCylinder(engine, 0.2, 0.34, 0.67, 20),
+      material,
+      bodyEntity
+    );
 
-## 下一个 Table
+    bottomEntity.transform.setPosition(0, 0.34, 0);
 
-我们要实现下一个 Table 的功能，先对此进行拆解，第一步是新 Table 的生成，第二步是镜头的移动。
+    const middleEntity = this.createRolePart(
+      "middle",
+      PrimitiveMesh.createCylinder(engine, 0.27, 0.2, 0.43),
+      material,
+      bodyEntity
+    );
+    middleEntity.transform.setPosition(0, 0.77, 0);
 
-在 `SceneScript` 中加上：
+    const middleSphere = this.createRolePart(
+      "middleSphere",
+      PrimitiveMesh.createSphere(engine, 0.27),
+      material,
+      bodyEntity
+    );
 
-```typescript
-goNextTable() {
-  // 新 Table 的生成
-  this.tableManager.createNextTable();
-  // 镜头移动
-  this.cameraScript.updateCameraPosition();
-}
-```
+    middleSphere.transform.setScale(1, 0.54, 1);
+    middleSphere.transform.setPosition(0, 1, 0);
 
-
-
-### 新 Table 的生成
-
-新 Table 的生成是基于当前 Table 的位置，向前或者是向左随机一段距离创建一个新的。
-
-那我们先在 `TableManager.ts` 里加上方法 `createNextTable()`，因为是基于当前 Table 创建的，所以参数需要传入一个 `Table`：
-
-```typescript
-createNextTable(currentTable: Table) {
-  const currentPosition = currentTable.entity.transform.position;
-  if (Math.random() > 0.5) {
-    const nextX = currentPosition.x + this.getRandomDistance();
-    return this.createCuboid(nextX, currentPosition.y, currentPosition.z);
-  } else {
-    const nextZ = currentPosition.z - this.getRandomDistance();
-    return this.createCuboid(currentPosition.x, currentPosition.y, nextZ);
+    this.bodyEntity = bodyEntity;
+    this.headEntity = headEntity;
   }
-}
-```
 
-我们目前简化一下，50% 概率往前，50% 概率往左。再根据当前坐标，加一个随机距离。随机一段距离的代码也很简单：
+  /**
+   * 创建角色部件
+   * @param name - entity 名称
+   * @param mesh - mesh
+   * @param material - material
+   * @param parent - 父 entity
+   * @returns 
+   */
+  private createRolePart(
+    name: string,
+    mesh: Mesh,
+    material: Material,
+    parent: Entity
+  ) {
+    const entity = parent.createChild(name);
+    const meshRenderer = entity.addComponent(MeshRenderer);
+    meshRenderer.mesh = mesh;
+    meshRenderer.setMaterial(material);
+    return entity;
+  }
 
-```typescript
-/**  Table 距离 */
-private getRandomDistance() {
-  return 3.2 + Math.floor(Math.random() * 7);
-}
-```
-
-根据实际情况调整一下参数就行了。
-
-
-
-### 相机的移动
-
-相机的移动是根据当前 Table 和下一个 Table 的位置来定的，因为需要看到两个 Table，所以相机应当 lookAt 两个 Table 中间的位置，只需要在原始位置的基础上加上这个中间位置即可。
-
-我们在 CameraScript 中加入方法 ：
-
-```typescript
- updateCameraPosition(currentTable: Table, nextTable: Table) {
-   const currentTablePosition = currentTable.entity.transform.position;
-   const nextTablePosition = nextTable.entity.transform.position;
-   this.entity.transform.setPosition(
-     (nextTablePosition.x + currentTablePosition.x) / 2 - 100,
-     (nextTablePosition.y + currentTablePosition.y) / 2 + 100,
-     (nextTablePosition.z + currentTablePosition.z) / 2 + 100
-   );
- }
-```
-
-
-
-### Scene 脚本修改
-
-在相机移动和新 Table 生成的地方，都依赖于 `currentTable` 和 `targetTable` 两个对象，所以我们在 `SceneScript` 需要添加对当前和下一个 Table 的管理。
-
-在初始化的方法里，先缓存开始的 `currentTable` 和 `targetTable`：
-
-```typescript
-reset() {
-  this.ground.clearChildren();
-  this.currentTable = this.tableManager.createCuboid(-2.5, 0, 0);
-  this.targetTable = this.tableManager.createCuboid(4.2, 0, 0);
-}
-```
-
-在到 `goNextTable` 方法里加上 current 和 target 的转换：
-
-```typescript
-goNextTable() {
-  this.currentTable = this.targetTable;
-  this.targetTable = this.tableManager.createNextTable(this.currentTable);
-  this.cameraScript.updateCameraPosition(this.currentTable, this.targetTable);
-}
-```
-
-
-
-这样就可以完成了基本的场景逻辑，每次调用 `goNextTable` 方法，都会切换到新的 Table。但是作为一款游戏还少了非常重要的一部分，就是动画效果。
-
-
-
-## 添加动画效果
-
-这款游戏里用的动画大部分都比较简单，只需要使用简单缓动动画就可以实现，我们需要先安装 `tween.js` 来实现镜头移动和 Table 落下的效果。（关于 Tween.js 详细文档可以查看官网）
-
-```shell
-npm install @tweenjs/tween.js --save
-```
-
-
-
-我们先暂时在 `SceneScript` 添加 `Tween` 的更新：
-
-```typescript
-...
-import * as TWEEN from "@tweenjs/tween.js";
-
-export class SceneScript extends Script {
-  ...
-	onUpdate() {
-    TWEEN.update();
+  reset() {
+    const initPosition = Config.roleInitPosition;
+    this.entity.transform.setPosition(
+      initPosition[0],
+      initPosition[1],
+      initPosition[2]
+    );
+    this.entity.transform.setRotation(0, 0, 0);
   }
 }
 ```
 
+`createRoleModel` 创建了角色的模型，`createRolePart` 创建了角色部件，`reset` 方法设置了角色初始化的位置和旋转角度，这里的 Cylinder 和 Sphere 都是根据实际情况调整的。
 
-
-### 镜头移动效果
-
-我们修改 `TableScript` 的 `updateCameraPosition` 方法：
+我们在 `index.ts` 加上角色：
 
 ```typescript
-updateCameraPosition(currentTable: Table, nextTable: Table) {
-  const currentTablePosition = currentTable.entity.transform.position;
-  const nextTablePosition = nextTable.entity.transform.position;
-  new Tween(this.entity.transform.position)
-    .to(
-    {
-      x: (nextTablePosition.x + currentTablePosition.x) / 2 - 100,
-      y: (nextTablePosition.y + currentTablePosition.y) / 2 + 100,
-      z: (nextTablePosition.z + currentTablePosition.z) / 2 + 100,
-    },
-    800
-  )
-    .start()
-    .onUpdate(() => {
-    const pos = this.entity.transform.position;
-    this.entity.transform.position = pos;
-  });
+rootEntity.createChild("role").addComponent(RoleScript).reset();
+```
+
+即可看到：
+
+<img src="/Users/husong/Library/Application Support/typora-user-images/image-20220509173138134.png" alt="image-20220509173138134" style="zoom:50%;" />
+
+角色被放置到场景中了。
+
+## 角色动画
+
+接下来我们来看看角色动画，角色动画分三大类：
+
+- **交互动画**：即用户长按屏幕，角色会有按压和回弹的效果
+- **跳跃动画：**根据用户按压时长，角色的抛物线动画及空中旋转
+- **失败动画**：若角色未跳到下一个台子上，会直接下落，或者是翻倒的效果。
+
+### 交互动画
+
+#### 按压
+
+按压本质上是一种角色状态，当用户处于按压时，角色切换到被按压状态，在 onUpdate 生命周期里，Body 部分被压缩，头部下降，整体也会有一个下降（由于 Table 也会被压缩）。我们也需要设置一个按压过程中最极限的部分。
+
+<img src="https://gw.alipayobjects.com/zos/OasisHub/402243da-487c-46dd-8a2a-d016192653e7/press.gif" alt="press" style="zoom:50%;" />
+
+我们先添加一个 `RoleStatus` 的枚举变量：
+
+```typescript
+enum RoleStatus {
+  Idle,
+  Pressed,
+  Jump,
+  Dead,
 }
 ```
 
-这样就会把 Camera 的位置在 800ms 内线性移动到目标位置。
-
-
-
-### Table 下落
-
-在 `Table.ts` 中添加 `show` 方法：
+并且在 `RoleScript` 里添加状态，并且添加 `press` 方法，：
 
 ```typescript
-show() {
-  const pos = this.entity.transform.position;
-  pos.y = 3.5;
-  this.entity.transform.position = pos;
-  new Tween({ posY: this.entity.transform.position.y })
-    .to({ posY: 0 }, 800)
-    .onUpdate((obj) => {
-    const pos = this.entity.transform.position;
-    pos.y = obj.posY;
-    this.entity.transform.position = pos;
+class RoleScript {
+	private status: RoleStatus = RoleStatus.Idle;
+	
+	press() {
+		if (this.status === RoleStatus.Idle) {
+      this.status = RoleStatus.Pressed;
+      this.touchStartTime = Date.now();
+    }
+  }
+}
+```
+
+按压开始时也需要记录一下开始的时间，为了后续计算水平和垂直的速度。
+
+需要在 `onUpdate` 生命周期中，执行对 `RoleStatus.Pressed ` 状态进行判断，并且修改当前角色的不同部件的位置或缩放：
+
+```typescript
+onUpdate(deltaTime: number): void {
+  switch (this.status) {
+    case RoleStatus.Pressed: {
+      const scale = this.bodyEntity.transform.scale;
+      scale.x += 0.0003 * deltaTime;
+      if (scale.x > 1.8) {
+        scale.x = 1.8;
+      }
+      scale.z = scale.x;
+
+      scale.y -= 0.0001 * deltaTime;
+      if (scale.y < 0.8) {
+        scale.y = 0.8;
+      }
+
+      const headPosition = this.headEntity.transform.position;
+      headPosition.y -= 0.000175 * deltaTime;
+      if (headPosition.y < 1.25) {
+        headPosition.y = 1.25;
+      }
+      break;
+    }
+  }
+}
+```
+
+
+
+#### 回弹
+
+<img src="https://gw.alipayobjects.com/zos/OasisHub/363242b9-4e2b-43e5-8f2b-e70cfd07575a/rebounce.gif" alt="rebounce" style="zoom:50%;" />
+
+(动画效果已经放慢)
+
+回弹动画非常简单，记录好 Body 和 Head 初始状态，使用 Tween 动画还原初始状态即可：
+
+```typescript
+reBounce() {
+  const scale = this.bodyEntity.transform.scale;
+  const position = this.headEntity.transform.position;
+
+  this.reBounceTween && remove(this.reBounceTween);
+
+  this.reBounceTween = new Tween({
+    scaleX: scale.x,
+    scaleY: scale.y,
+    scaleZ: scale.z,
+    positionY: position.y,
   })
-    .easing(Easing.Quartic.In)
+    .to({ scaleX: 1, scaleY: 1, scaleZ: 1, positionY: 9.5 }, 200)
+    .onUpdate((obj) => {
+    scale.setValue(obj.scaleX, obj.scaleY, obj.scaleZ);
+    position.y = obj.positionY;
+    this.headEntity.transform.position = position;
+    this.bodyEntity.transform.scale = scale;
+  })
+    .easing(Easing.Elastic.Out)
     .start();
 }
 ```
 
-同时在 `TableManager` 里修改 `createNextTable` 方法：
+本质上只有 Body 的 scale 和 Head 的 position.y 发生了改变，200 毫秒把角色还原回去就行。
+
+### 跳跃动画
+
+<img src="https://gw.alipayobjects.com/zos/OasisHub/c30989a8-2766-4622-a0ea-4d1ae83c1961/jump.gif" alt="jump" style="zoom:50%;" />
+
+跳跃部分本质上是抛物线运动和旋转。
+
+抛物线运动在水平方向是匀速直接运动，垂直方向是匀加速直线运动。我们需要根据按压的时长，计算出一个水平初速度和垂直初速度。再设定一个重力加速度去控制下落即可。
+
+首先我们需要一个计算初速度的方法，根据时间计算出水平和垂直的速度：
 
 ```typescript
-createNextTable(currentTable: Table) {
-  const currentPosition = currentTable.entity.transform.position;
-  let table: Table;
-  if (Math.random() > 0.5) {
-    const nextX = currentPosition.x + this.getRandomDistance();
-    table = this.createCuboid(nextX, currentPosition.y, currentPosition.z);
-  } else {
-    const nextZ = currentPosition.z - this.getRandomDistance();
-    table = this.createCuboid(currentPosition.x, currentPosition.y, nextZ);
-  }
-  table.show();
-  return table;
+private calculateVelocity(duration: number) {
+  this.velocityHorizontal = Math.min((0.02 / 2000) * duration, 0.02);
+  this.velocityVertical = Math.min((0.04 / 2000) * duration, 0.04);
 }
 ```
 
-在创建下一个 Table 时先调用 `table.show()` ，这样就会产生一个下落的效果。
+同样也在 `onUpdate` 方法里处理跳跃状态：
+
+```typescript
+onUpdate(dt: number) {
+  switch (this.status) {
+    case RoleStatus.Pressed:
+      ...
+      case RoleStatus.Jump: {
+        const translateVertical = this.velocityVertical * dt;
+        const translateHorizontal = this.velocityHorizontal * dt;
+        this.velocityVertical = this.velocityVertical - this.gravity * dt;
+        const pos = this.entity.transform.position;
+        this.entity.transform.setPosition(
+          pos.x + translateHorizontal * this.translateDirection.x,
+          pos.y + translateY,
+          pos.z + translateHorizontal * this.translateDirection.z
+        );
+        break;
+      }
+  }
+}
+```
+
+其中需要注意判断降落到最低点，这里只是计算了一下 jumpTime（跳跃经过的时间）和 jumpTotalTime（跳跃总时间），如果超过了 jumpTotalTime，角色状态切换，角色位置固定。然后进入到 to be or not to be 的判断之中。
+
+旋转非常简单，我们水平距离计算出跳跃的总时间，在时间内使用 Tween 旋转两圈。还有需要计算的一点就是旋转方向，这个和跳跃的方向有关，这里我们先放到参数里。根据目标方向和上方向的叉乘结果得到旋转的方向。
+
+```typescript
+jumpRotate(jumpTotalTime: number, direction: Vector3) {
+  const { rotateAxis } = this;
+  rotateAxis.setValue(direction.x, 0, direction.z);
+  Vector3.cross(rotateAxis, upVec, rotateAxis);
+
+  const quat = this.entity.transform.rotationQuaternion;
+  new Tween({
+    rotation: 0,
+  })
+    .to({ rotation: -360 }, jumpTotalTime * 1000)
+    .onUpdate((obj) => {
+    Quaternion.rotationAxisAngle(
+      rotateAxis,
+      (Math.PI * obj.rotation) / 180,
+      quat
+    );
+    this.entity.transform.rotationQuaternion = quat;
+  })
+    .onComplete(() => {
+    this.entity.transform.setRotation(0, 0, 0);
+  })
+    .easing(Easing.Linear.None)
+    .start();
+}
+```
+
+其中 `upVec` 就是 `new Vector3(0, 1, 0)` 。
+
+### 失败动画
+
+#### 直接落地
+
+<img src="https://gw.alipayobjects.com/zos/OasisHub/532b8db5-7733-44c4-8dc7-1f10a4ae7775/dieVerticle.gif" alt="dieVerticle" style="zoom:50%;" />
+
+#### 倾斜倒地
+
+<img src="https://gw.alipayobjects.com/zos/OasisHub/e2dedf42-3d82-4fd9-b2c6-7e6f93b5f3e2/dieRotate.gif" alt="dieRotate" style="zoom:50%;" />
+
+倾斜倒地需要计算的会更复杂一些，需要拿到 Table 的坐标和当前角色的坐标，才能知道是往哪个方位倾倒。
+
+```typescript
+const { rotateAxis } = this;
+this.status = RoleStatus.Dead;
+const tablePos = table.entity.transform.position;
+const rolePos = this.entity.transform.position;
+rotateAxis.setValue(rolePos.x - tablePos.x, 0, rolePos.z - tablePos.z);
+Vector3.cross(rotateAxis, upVec, rotateAxis);
+const quat = this.entity.transform.rotationQuaternion;
+new Tween({ rotation: 0 })
+  .to({ rotation: -120 }, 800)
+  .onUpdate((obj) => {
+  Quaternion.rotationAxisAngle(
+    rotateAxis,
+    (Math.PI * obj.rotation) / 180,
+    quat
+  );
+  this.entity.transform.rotationQuaternion = quat;
+})
+  .start();
+```
+
+同样也需要使用到叉乘去找到旋转平面的法线。理想情况下最好还是找到角色和 Table 相接的点作为旋转的 pivot，但是这里做得不算太严谨，还是以角色底部中心点作为旋转点，简化了一点运算。
+
+这样，角色动画就基本完成了。BTW，上面很多动画效果都用到了 direction，本身的 direction 的向量计算非常简单，使用 Target Table 的 position 和 当前角色的 position 相减就可以得到。
+
+我们在释放的时候可以组合调用回弹、旋转、跳跃等动画，同时我们需要计算跳跃的总时间得出旋转的时长：
+
+```typescript
+release(direction: Vector3) {
+  if (this.status === RoleStatus.Pressed) {
+    this.translateDirection
+      .setValue(direction.x, direction.y, direction.z)
+      .normalize();
+    this.calculateVelocity(Date.now() - this.touchStartTime);
+    this.jumpTime = 0;
+    this.jumpTotalTime = this.calculateTotalTime(
+      this.velocityVertical,
+      Config.gravity,
+      Math.abs(this.entity.transform.position.y - Config.groundY)
+    );
+    this.reBounce();
+    this.jumpRotate();
+    this.status = RoleStatus.Jump;
+  }
+}
+
+private calculateTotalTime(v: number, g: number, h: number) {
+  const moreTime = (-v + Math.sqrt(v * v - 2 * g * -h)) / g;
+  return (v / g) * 2 - moreTime;
+}
+```
+
+其中计算总时长是一元二次方程的求解公式。
+
+对于失败动画，涉及到游戏逻辑部分，先不在本小节展开。
+
+## 最后
+
+本小节内容较多，部分内容涉及一点数学运算，有一元二次方程求解，叉乘的运用。重力和速度的调整非常麻烦，详细可以参考：
 
 
 
-经过上述一系列操作之后，我们就实现了开始的效果，下一章会带来角色的创建和角色动画，敬请期待。
+
+
