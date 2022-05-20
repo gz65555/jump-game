@@ -402,7 +402,9 @@ private calculateTotalTime(v: number, g: number, h: number) {
 
 ## 最后
 
-本小节内容较多，部分内容涉及一点数学运算，有一元二次方程求解，叉乘的运用。重力和速度的调整非常麻烦，详细可以参考：
+本小节内容较多，部分内容涉及一点数学运算，有一元二次方程求解，叉乘的运用。重力和速度的调整非常麻烦，详细可以参考代码：https://github.com/gz65555/jump-game/tree/feat/role
+
+
 
 
 
