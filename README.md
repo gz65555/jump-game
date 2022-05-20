@@ -269,4 +269,4 @@ createNextTable(currentTable: Table) {
 
 
 
-经过上述一系列操作之后，我们就实现了开始的效果，下一章会带来角色的创建和角色动画，敬请期待。
+经过上述一系列操作之后，我们就实现了开始的效果，下一章会带来角色的创建和角色动画，敬请期待。本小节代码可以参考：https://github.com/gz65555/jump-game/tree/feat/scene-logic
