@@ -5,5 +5,5 @@ export module Config {
   export const groundY = tableHeight;
   export const roleInitPosition = [-2.5, groundY, 0];
   /** m/(ms^2) */
-  export const gravity = 0.0001;
+  export const gravity = 0.000115;
 }

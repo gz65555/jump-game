@@ -145,7 +145,7 @@ rootEntity.createChild("role").addComponent(RoleScript).reset();
 
 即可看到：
 
-<img src="/Users/husong/Library/Application Support/typora-user-images/image-20220509173138134.png" alt="image-20220509173138134" style="zoom:50%;" />
+<img src="https://gw.alipayobjects.com/zos/OasisHub/0883a8ac-651d-4844-af0d-a9be8f1d97a1/image-20220509173138134.png" alt="image-20220509173138134" style="zoom:50%;" />
 
 角色被放置到场景中了。
 

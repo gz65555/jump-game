@@ -10,8 +10,12 @@ export class CameraScript extends Script {
     camera.isOrthographic = true;
     camera.nearClipPlane = 0.1;
     camera.farClipPlane = 1000;
-    entity.transform.setPosition(-100, 100, 100);
-    entity.transform.lookAt(new Vector3());
+    this.reset();
+  }
+
+  reset() {
+    this.entity.transform.setPosition(-100, 100, 100);
+    this.entity.transform.lookAt(new Vector3());
   }
 
   updateCameraPosition(currentTable: Table, nextTable: Table) {

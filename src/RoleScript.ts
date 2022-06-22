@@ -11,6 +11,7 @@ import {
   Quaternion,
 } from "oasis-engine";
 import { Config } from "./Config";
+import { Table } from "./Table";
 
 enum RoleStatus {
   Idle,
@@ -20,8 +21,13 @@ enum RoleStatus {
 }
 
 const upVec = new Vector3(0, 1, 0);
-
+const rotateAxis = new Vector3(0, 1, 0);
 export class RoleScript extends Script {
+  set onJumpComplete(func: Function) {
+    this._onJumpComplete = func;
+  }
+
+  readonly size = 0.1;
   private bodyEntity: Entity;
   private headEntity: Entity;
   private status: RoleStatus = RoleStatus.Idle;
@@ -33,6 +39,7 @@ export class RoleScript extends Script {
   private jumpTime: number;
   private jumpTotalTime: number;
   private translateDirection: Vector3 = new Vector3();
+  private _onJumpComplete: Function;
 
   press() {
     if (this.status === RoleStatus.Idle) {
@@ -43,10 +50,11 @@ export class RoleScript extends Script {
 
   release(direction: Vector3) {
     if (this.status === RoleStatus.Pressed) {
+      const duration = Date.now() - this.touchStartTime;
       this.translateDirection
         .setValue(direction.x, direction.y, direction.z)
         .normalize();
-      this.calculateVelocity(Date.now() - this.touchStartTime);
+      this.calculateVelocity(duration);
       this.jumpTime = 0;
       this.jumpTotalTime = this.calculateTotalTime(
         this.velocityVertical,
@@ -85,6 +93,40 @@ export class RoleScript extends Script {
       .start();
   }
 
+  dieRotate(table: Table, onComplete: Function) {
+    this.status = RoleStatus.Dead;
+    const tablePos = table.entity.transform.position;
+    const rolePos = this.entity.transform.position;
+    rotateAxis.setValue(rolePos.x - tablePos.x, 0, rolePos.z - tablePos.z);
+    Vector3.cross(rotateAxis, upVec, rotateAxis);
+    const quat = this.entity.transform.rotationQuaternion;
+    new Tween({ rotation: 0 })
+      .to({ rotation: -120 }, 800)
+      .onUpdate((obj) => {
+        Quaternion.rotationAxisAngle(
+          rotateAxis,
+          (Math.PI * obj.rotation) / 180,
+          quat
+        );
+        this.entity.transform.rotationQuaternion = quat;
+      })
+      .onComplete(onComplete as any)
+      .start();
+  }
+
+  dieVertical(onComplete: Function) {
+    this.status = RoleStatus.Dead;
+    new Tween({ y: Config.groundY })
+      .to({ y: -0.5 }, 800)
+      .onUpdate((obj) => {
+        const pos = this.entity.transform.position;
+        pos.y = obj.y;
+        this.entity.transform.position = pos;
+      })
+      .onComplete(onComplete as any)
+      .start();
+  }
+
   reset() {
     const initPosition = Config.roleInitPosition;
     this.entity.transform.setPosition(
@@ -92,10 +134,12 @@ export class RoleScript extends Script {
       initPosition[1],
       initPosition[2]
     );
+    this.status = RoleStatus.Idle;
     this.entity.transform.setRotation(0, 0, 0);
   }
 
   onAwake() {
+    window["role"] = this;
     this.createRoleModel();
   }
 
@@ -103,19 +147,19 @@ export class RoleScript extends Script {
     switch (this.status) {
       case RoleStatus.Pressed: {
         const scale = this.bodyEntity.transform.scale;
-        scale.x += 0.0003 * deltaTime;
+        scale.x += 0.0006 * deltaTime;
         if (scale.x > 1.8) {
           scale.x = 1.8;
         }
         scale.z = scale.x;
 
-        scale.y -= 0.0001 * deltaTime;
+        scale.y -= 0.0002 * deltaTime;
         if (scale.y < 0.8) {
           scale.y = 0.8;
         }
 
         const headPosition = this.headEntity.transform.position;
-        headPosition.y -= 0.000175 * deltaTime;
+        headPosition.y -= 0.00035 * deltaTime;
         if (headPosition.y < 1.25) {
           headPosition.y = 1.25;
         }
@@ -125,6 +169,7 @@ export class RoleScript extends Script {
         if (this.jumpTime > this.jumpTotalTime) {
           this.status = RoleStatus.Idle;
           this.entity.transform.position.y = Config.groundY;
+          this._onJumpComplete && this._onJumpComplete();
           return;
         }
         const translateVertical = this.velocityVertical * deltaTime;
@@ -242,7 +287,8 @@ export class RoleScript extends Script {
   }
 
   private calculateVelocity(duration: number) {
-    this.velocityHorizontal = Math.min((0.02 / 2000) * duration, 0.02);
-    this.velocityVertical = Math.min((0.04 / 2000) * duration, 0.04);
+    // duration = 80;
+    this.velocityHorizontal = duration / 36000;
+    this.velocityVertical = 0.025 + duration / 100000;
   }
 }

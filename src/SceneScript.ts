@@ -8,9 +8,17 @@ export class SceneScript extends Script {
   private ground: Entity;
   private tableManager: TableManager;
   // private tarTargetTable
-  private currentTable: Table;
-  private targetTable: Table;
+  public _currentTable: Table;
+  public _targetTable: Table;
   private cameraScript: CameraScript;
+
+  get currentTable() {
+    return this._currentTable;
+  }
+
+  get targetTable() {
+    return this._targetTable;
+  }
 
   onAwake() {
     this.ground = this.entity.createChild("ground");
@@ -21,16 +29,16 @@ export class SceneScript extends Script {
   }
 
   goNextTable() {
-    this.currentTable = this.targetTable;
-    this.targetTable = this.tableManager.createNextTable(this.currentTable);
+    this._currentTable = this.targetTable;
+    this._targetTable = this.tableManager.createNextTable(this.currentTable);
     this.targetTable.show();
     this.cameraScript.updateCameraPosition(this.currentTable, this.targetTable);
   }
 
   reset() {
     this.ground.clearChildren();
-    this.currentTable = this.tableManager.createCuboid(-2.5, 0, 0);
-    this.targetTable = this.tableManager.createCuboid(4.2, 0, 0);
+    this._currentTable = this.tableManager.createCuboid(-2.5, 0, 0);
+    this._targetTable = this.tableManager.createCuboid(4.2, 0, 0);
   }
 
   onUpdate(deltaTime: number): void {
